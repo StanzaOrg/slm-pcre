@@ -1,0 +1,228 @@
+defpackage pcre:
+  import core
+  import collections
+
+
+;==============================================
+;================= C Externs ==================
+;==============================================
+extern malloc: long -> ptr<?>
+extern free : ptr<?> -> int
+extern pcre_compile: (ptr<byte>, int, ptr<ptr<byte>>, ptr<int>, ptr<byte>) -> ptr<?>
+extern pcre_exec: (ptr<byte>, ptr<byte>, ptr<byte>, int, int, int, ptr<int>, int) -> int
+
+
+;==============================================
+;================== Globals ===================
+;==============================================
+val OVECCOUNT:Int = 999
+
+
+;==============================================
+;============ LoStanza -> Stanza ==============
+;==============================================
+lostanza deftype PCRE :
+  pcre-ptr: ptr<?>
+
+lostanza defn null? (p:ref<PCRE>) -> ref<Int> :
+  if p.pcre-ptr == null:
+    return new Int{1}
+  return new Int{0}
+
+lostanza deftype Exec :
+  rc: int
+  ovector: ptr<int>
+
+lostanza defn rc (e:ref<Exec>) -> ref<Int> :
+  return new Int{e.rc}
+
+lostanza defn ovector-at (e:ref<Exec>, i:ref<Int>) -> ref<Int> :
+  return new Int{e.ovector[i.value]}
+
+lostanza defn free (p:ref<PCRE>) -> ref<Int> :
+  return new Int{call-c free(p.pcre-ptr)}
+
+lostanza defn free (e:ref<Exec>) -> ref<Int> :
+  return new Int{call-c free(e.ovector)}
+
+
+;==============================================
+;=========== LoStanza Calls to PCRE ===========
+;==============================================
+lostanza defn pcre-compile (rgx:ref<String>) -> ref<PCRE> :
+  val error-buffer = call-c malloc(sizeof(ptr<?>) * 10)
+  val error-offset = call-c malloc(sizeof(int) * 10)
+  val pcre-ptr = call-c pcre_compile(addr!(rgx.chars), 0, error-buffer, error-offset, null)
+
+  call-c free(error-buffer)
+  call-c free(error-offset)
+
+  return new PCRE{pcre-ptr}
+
+lostanza defn pcre-exec (pcre:ref<PCRE>, str:ref<String>, start:ref<Int>, offset:ref<Int>) -> ref<Exec> :
+  val ovector = call-c malloc(sizeof(int) * OVECCOUNT.value)
+  ;Point to the string shifted by start.
+  val address = addr!(str.chars) + start.value
+  ;The length of the now shifted string.
+  val len = str.length as int - start.value
+  ;pcre_exec also includes offset.value for an additional offset.
+  var rc:int =  call-c pcre_exec(pcre.pcre-ptr, null, address, len, offset.value, 0, ovector, OVECCOUNT.value)
+
+  return new Exec{rc, ovector}
+
+
+;==============================================
+;============ Stanza -> LoStanza ==============
+;==============================================
+
+; Indicates in a RegexResult that no match was found
+val NO-MATCH = -1
+
+;RegexResult stores information about a regex match:
+; result - the resulting regex matches
+; end - the index of the last matched character in the query string
+;       or NO-MATCH if no match is found.
+public defstruct RegexResult :
+  result: Array<String>
+  end: Int
+
+public defn is-match? (r:RegexResult) -> True|False :
+  end(r) != NO-MATCH
+
+public defmethod print (o:OutputStream, r:RegexResult) :
+  print(o, "RegexResult: end: %_ result=[%,]" % [end(r), result(r)])
+
+;re-match is the entry point for the PCRE binding.
+; Parameters :
+;   (1) Regular expression string
+;   (2) String that will be searched for a regular expression match
+;   (3) Integer starting index of parameter (2)
+;   (4) Integer offset from parameter (3) to indicate how much of the string has already been consumed
+; Returns :
+;   RegexResult with
+;    - An array of n+1 elements where n is the number of capture groups in (1).
+;      The first element is the matched substring of (2) followed by the captured groups in order.
+;    - The index of the last matched character (used for global matching). NO-MATCH if no match is found.
+public defn re-match (rgx:String, str:String, start:Int, offset:Int) -> RegexResult :
+  if start > length(str) :
+    fatal("Starting index %_ is out of bounds for string of length %_." % [start length(str)])
+
+  if offset > length(str) - start :
+    fatal("Offset %_ is out of bounds for string of length %_ with starting index %_." % [offset start length(str)])
+
+  val pcre = pcre-compile(rgx)
+  val exec = pcre-exec(pcre, str, start, offset)
+  var rc = rc(exec)
+
+  ; Quick function to deallocate memory.
+  val free-pcre = fn () : (free(pcre) free(exec))
+
+  ; Not a match.
+  if rc < 0 :
+    free-pcre()
+    RegexResult(Array<String>(0), NO-MATCH)
+  ; Not enough room in the vector to store matches.
+  else if rc == 0 :
+    free-pcre()
+    fatal("PCRE Vector can only capture up to %_ substrings." % [OVECCOUNT / 3])
+  ; A match!
+  else :
+    ;Stores matched groups.
+    val match-vector = Vector<String>()
+    ;Stores the index of the last matched character.
+    var substr-end = NO-MATCH
+
+    ;Stores the length of the string from start.
+    val str-len = length(str) - start
+
+    ; This is the actual end of the match sub-string
+    val endMatch = ovector-at(exec, 1)
+
+    for i in 0 to rc do :
+      val substr-start = ovector-at(exec, 2 * i)
+      val substr-length = ovector-at(exec, 2 * i + 1) - substr-start
+      ; situational subtract 1 alleviates edge cases for lookahead/behind, .*, .+
+      ; ensures index into characters if that index exists
+
+      if substr-start >= 0 :
+        substr-end = substr-start + substr-length
+        val start-index = substr-start + start
+        val end-index = substr-end + start - (1 when str-len < substr-end else 0)
+        val substr = str[start-index to end-index]
+        add(match-vector, substr)
+
+    ;This fatal shouldn't ever trigger.
+    ;It only triggers if none of the loop cases result in substr-start >= 0
+    ;However, if that were the case, the regex wouldn't have matched.
+    fatal("Unexpected PCRE match.") when substr-end == NO-MATCH
+
+    free-pcre()
+    RegexResult(to-array<String>(match-vector), endMatch)
+
+
+public defn re-match (rgx:String, str:String, idx:Int) -> RegexResult :
+  re-match(rgx, str, idx, 0)
+
+public defn re-match (rgx:String, str:String) -> RegexResult :
+  re-match(rgx, str, 0)
+
+;Public-facing non-global regex match with starting index.
+; Returns Array<String> corresponding to the first match found.
+
+public defn regex-match (rgx:String, str:String, idx:Int) -> Array<String> :
+  result(re-match(rgx, str, idx, 0))
+
+;Public-facing non-global regex match with default starting index 0.
+; Returns Array<String> corresponding to the first match found.
+public defn regex-match (rgx:String, str:String) -> Array<String> :
+  regex-match(rgx, str, 0)
+
+;Public-facing global regex match with starting index.
+; Returns Array<Array<String>> corresponding to all matches found.
+public defn global-regex-match (rgx:String, str:String, idx:Int) -> Array<Array<String>> :
+  ; The length of the string of interest.
+  val str-len = length(str) - idx
+  ; Track the offset (how much of `str has been consumed?)
+  var offset:Int = 0
+  ; Track the previous end index used to update offset.
+  var end:Int = 0
+
+  var regex-result = re-match(rgx, str, idx, offset)
+  val match-vector = Vector<Array<String>>()
+  for _ in 0 to false first! :
+    ; No match
+    if /end(regex-result) == NO-MATCH :
+      One(to-array<Array<String>>(match-vector))
+    ; Match found
+    else :
+      add(match-vector, result(regex-result))
+      ; Continue matching against the query string.
+      if offset < str-len :
+        ; Reassign `offset and `end before the next regex match.
+        ; Starting after the first character prevents infinite cases with blank regex.
+        val next = max(/end(regex-result), end + 1)
+        offset = offset + next - end
+        end = /end(regex-result)
+        ; Regex match from the new offset.
+        regex-result = re-match(rgx, str, idx, offset)
+        None()
+      ; If the query string has been fully consumed, we are done.
+      else :
+        One(to-array<Array<String>>(match-vector))
+
+;Public-facing global regex match with default starting index 0.
+; Returns Array<Array<String>> corresponding to all matches found.
+public defn global-regex-match (rgx:String, str:String) -> Array<Array<String>> :
+  global-regex-match(rgx, str, 0)
+
+;Alternate public-facing regex match with starting index.
+; If global?, runs the global regex match and returns Array<Array<String>>
+; If not global?, runs the non-global regex match and returns Array<String>
+public defn regex-match (rgx:String, str:String, idx:Int, global?:True|False) -> Array<String>|Array<Array<String>> :
+  global-regex-match(rgx, str, idx) when global? else regex-match(rgx, str, idx)
+
+;Alternate public-facing regex match with default starting index 0.
+; If global?, runs the global regex match and returns Array<Array<String>>
+; If not global?, runs the non-global regex match and returns Array<String>
+public defn regex-match (rgx:String, str:String, global?:True|False) -> Array<String>|Array<Array<String>> :
+  regex-match(rgx, str, 0, global?)

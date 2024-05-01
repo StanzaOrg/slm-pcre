@@ -1,0 +1,330 @@
+#use-added-syntax(tests)
+defpackage pcre/tests :
+  import core
+  import collections
+  import pcre
+
+;Check that two String arrays have equivalent content.
+defn equal-contents? (a:Array<String>, b:Array<String>) -> True|False :
+  length(a) == length(b) and
+  for i in 0 to length(a) all? : a[i] == b[i]
+
+;Check that two arrays of String arrays have equivalent content.
+defn equal-contents? (a:Array<Array<String>>, b:Array<Array<String>>) -> True|False :
+  length(a) == length(b) and
+  for i in 0 to length(a) all? : equal-contents?(a[i], b[i])
+
+;Create an array of arrays from a Seqable
+defn to-nested-array<T> (s:Seqable<Seqable<T>>) -> Array<Array<T>> :
+  to-array<Array<T>> $ for ss in s seq : to-array<T>(ss)
+
+
+;===== regex-match =====
+deftest pcre-with-empty-0 :
+  val result = regex-match("", "")
+  val expected = to-array<String>([""])
+  #ASSERT(equal-contents?(result, expected))
+
+deftest pcre-with-empty-1 :
+  val result = regex-match("", "a")
+  val expected = to-array<String>([""])
+  #ASSERT(equal-contents?(result, expected))
+
+deftest pcre-with-empty-2 :
+  val result = regex-match("a", "")
+  val expected = to-array<String>([])
+  #ASSERT(equal-contents?(result, expected))
+
+deftest pcre-basic-0 :
+  val result = regex-match("a", "a")
+  val expected = to-array<String>(["a"])
+  #ASSERT(equal-contents?(result, expected))
+
+deftest pcre-basic-1 :
+  val result = regex-match("a", "ab")
+  val expected = to-array<String>(["a"])
+  #ASSERT(equal-contents?(result, expected))
+
+deftest pcre-basic-2 :
+  val result = regex-match("ab", "a")
+  val expected = to-array<String>([])
+  #ASSERT(equal-contents?(result, expected))
+
+deftest pcre-captured-0 :
+  val result = regex-match("a(b)", "ab")
+  val expected = to-array<String>(["ab", "b"])
+  #ASSERT(equal-contents?(result, expected))
+
+deftest pcre-captured-1 :
+  val result = regex-match("(a(b))", "ab")
+  val expected = to-array<String>(["ab", "ab", "b"])
+  #ASSERT(equal-contents?(result, expected))
+
+deftest pcre-captured-2 :
+  val result = regex-match("((a)(b))", "ab")
+  val expected = to-array<String>(["ab", "ab", "a", "b"])
+  #ASSERT(equal-contents?(result, expected))
+
+deftest pcre-meta-0 :
+  val result = regex-match("\\w", "a")
+  val expected = to-array<String>(["a"])
+  #ASSERT(equal-contents?(result, expected))
+
+deftest pcre-meta-1 :
+  val result = regex-match("\\w", "ab")
+  val expected = to-array<String>(["a"])
+  #ASSERT(equal-contents?(result, expected))
+
+deftest pcre-meta-2 :
+  val result = regex-match("a+", "aaa")
+  val expected = to-array<String>(["aaa"])
+  #ASSERT(equal-contents?(result, expected))
+
+deftest pcre-meta-3 :
+  val result = regex-match("\\w+", "ab")
+  val expected = to-array<String>(["ab"])
+  #ASSERT(equal-contents?(result, expected))
+
+deftest pcre-meta-4 :
+  val result = regex-match("a(.*)", "aaa")
+  val expected = to-array<String>(["aaa", "aa"])
+  #ASSERT(equal-contents?(result, expected))
+
+deftest pcre-meta-5 :
+  val result = regex-match("a(.*?)", "ab")
+  val expected = to-array<String>(["a", ""])
+  #ASSERT(equal-contents?(result, expected))
+
+;[TODO] Fix $
+; deftest pcre-meta-6 :
+;   val result = regex-match("abc$", "abc")
+;   val expected = to-array<String>(["abc"])
+;   #ASSERT(equal-contents?(result, expected))
+
+;===== global-regex-match =====
+deftest global-pcre-empty-0 :
+  val result = global-regex-match("", "abc")
+  val expected = to-nested-array<String>([[""] [""] [""] [""]])
+  #ASSERT(equal-contents?(result, expected))
+
+deftest global-pcre-empty-1 :
+  val result = global-regex-match("()", "abc")
+  val expected = to-nested-array<String>([["", ""] ["", ""] ["", ""] ["", ""]])
+  #ASSERT(equal-contents?(result, expected))
+
+deftest global-pcre-empty-2 :
+  val result = global-regex-match("abc", "")
+  val expected = to-nested-array<String>([])
+  #ASSERT(equal-contents?(result, expected))
+
+deftest global-pcre-empty-3 :
+  val result = global-regex-match("", "")
+  val expected = to-nested-array<String>([[""]])
+  #ASSERT(equal-contents?(result, expected))
+
+deftest global-pcre-0 :
+  val result = global-regex-match("a", "aaa")
+  val expected = to-nested-array<String>([["a"] ["a"] ["a"]])
+  #ASSERT(equal-contents?(result, expected))
+
+deftest global-pcre-1 :
+  val result = global-regex-match("aaa", "a")
+  val expected = to-nested-array<String>([])
+  #ASSERT(equal-contents?(result, expected))
+
+deftest global-pcre-2 :
+  val result = global-regex-match("ab", "ababa")
+  val expected = to-nested-array<String>([["ab"] ["ab"]])
+  #ASSERT(equal-contents?(result, expected))
+
+deftest global-pcre-3 :
+  val result = global-regex-match("\\w\\w", "abcdef")
+  val expected = to-nested-array<String>([["ab"] ["cd"] ["ef"]])
+  #ASSERT(equal-contents?(result, expected))
+
+deftest global-pcre-4 :
+  val result = global-regex-match("\\w+", "abcdef")
+  val expected = to-nested-array<String>([["abcdef"]])
+  #ASSERT(equal-contents?(result, expected))
+
+deftest global-pcre-5 :
+  val result = global-regex-match("\\w+?", "abc")
+  val expected = to-nested-array<String>([["a"] ["b"] ["c"]])
+  #ASSERT(equal-contents?(result, expected))
+
+deftest global-pcre-6 :
+  val result = global-regex-match("^\\w+?", "abc")
+  val expected = to-nested-array<String>([["a"]])
+  #ASSERT(equal-contents?(result, expected))
+
+deftest global-pcre-7 :
+  val result = global-regex-match("([abc])(\\d+)", "a123XXb46NPQ14")
+  val expected = to-nested-array<String>([["a123", "a", "123"] ["b46", "b", "46"]])
+  #ASSERT(equal-contents?(result, expected))
+
+;[TODO] Fix $
+; deftest global-pcre-8 :
+;   val result = global-regex-match("ab$", "ababab")
+;   val expected = to-nested-array<String>([["ab"]])
+;   #ASSERT(equal-contents?(result, expected))
+
+;===== alternate regex-match =====
+deftest alternate-pcre-call-0 :
+  val result = regex-match("a", "aaa", false) as Array<String>
+  val expected = to-array<String>(["a"])
+  #ASSERT(equal-contents?(result, expected))
+
+deftest alternate-pcre-call-1 :
+  val result = regex-match("a", "aaa", true) as Array<Array<String>>
+  val expected = to-nested-array<String>([["a"] ["a"] ["a"]])
+  #ASSERT(equal-contents?(result, expected))
+
+;===== regex-match use case =====
+deftest pcre-kicad :
+  val rgx = "^(\\S+) \"?(.*?)\"? \\(at (-?\\d+(?:\\.\\d*)|-?(?:\\d*\\.)?\\d+) (-?\\d+(?:\\.\\d*)|-?(?:\\d*\\.)?\\d+)(?: (-?\\d+(?:\\.\\d*)|-?(?:\\d*\\.)?\\d+))?(?: unlocked)?\\) \\(layer ([^\\s)]+)\\)(?: hide)?\\s*"
+  val str = "reference J5 (at 0 -2.33) (layer F.SilkS)"
+  val result = regex-match(rgx, str)
+  val expected = to-array<String>(["reference J5 (at 0 -2.33) (layer F.SilkS)" "reference" "J5" "0" "-2.33" "F.SilkS"])
+  #ASSERT(equal-contents?(result, expected))
+
+;===== regex-match with index =====
+deftest pcre-index-0 :
+  val result = regex-match("a", "a", 1)
+  val expected = to-array<String>([])
+  #ASSERT(equal-contents?(result, expected))
+
+deftest pcre-index-1 :
+  val result = regex-match("a", "ab", 1)
+  val expected = to-array<String>([])
+  #ASSERT(equal-contents?(result, expected))
+
+deftest pcre-index-2 :
+  val result = regex-match("b", "ab", 1)
+  val expected = to-array<String>(["b"])
+  #ASSERT(equal-contents?(result, expected))
+
+deftest pcre-index-3 :
+  val result = regex-match("b", "ab", 2)
+  val expected = to-array<String>([])
+  #ASSERT(equal-contents?(result, expected))
+
+deftest pcre-index-4 :
+  val result = regex-match("", "", 0)
+  val expected = to-array<String>([""])
+  #ASSERT(equal-contents?(result, expected))
+
+deftest pcre-index-5 :
+  val result = regex-match("(a(b))", "ab", 0)
+  val expected = to-array<String>(["ab", "ab", "b"])
+  #ASSERT(equal-contents?(result, expected))
+
+deftest pcre-index-6 :
+  val result = regex-match("(a(b))", "ab", 1)
+  val expected = to-array<String>([])
+  #ASSERT(equal-contents?(result, expected))
+
+deftest pcre-index-7 :
+  val result = regex-match("(a(b))", "cab", 1)
+  val expected = to-array<String>(["ab", "ab", "b"])
+  #ASSERT(equal-contents?(result, expected))
+
+deftest pcre-index-8 :
+  val result = regex-match("\\w", "abc", 2)
+  val expected = to-array<String>(["c"])
+  #ASSERT(equal-contents?(result, expected))
+
+deftest pcre-index-9 :
+  val result = regex-match("a+", "aAAaaa", 4)
+  val expected = to-array<String>(["aa"])
+  #ASSERT(equal-contents?(result, expected))
+
+deftest pcre-index-10 :
+  val result = regex-match("^abc", "_abc", 1)
+  val expected = to-array<String>(["abc"])
+  #ASSERT(equal-contents?(result, expected))
+
+;[TODO] Fix $
+; deftest pcre-index-11 :
+;   val result = regex-match("na$", "banana", 2)
+;   val expected = to-array<String>(["na"])
+;   #ASSERT(equal-contents?(result, expected))
+
+;===== regex-match with index errors =====
+;Errors occur whenever index > length(second argument)
+deftest pcre-index-error-0 :
+  var error-caught? = false 
+  execute-with-error-handler(
+    fn () : regex-match("", "", 1)
+    fn (e) : error-caught? = true
+  )
+  #EXPECT(error-caught?)
+
+deftest pcre-index-error-1 :
+  var error-caught? = false 
+  execute-with-error-handler(
+    fn () : regex-match("Q+(8)4?", "ABCD", 10)
+    fn (e) : error-caught? = true
+  )
+  #EXPECT(error-caught?)
+
+;===== global-regex-match with index =====
+deftest global-pcre-index-0 :
+  val result = global-regex-match("", "abc", 2)
+  val expected = to-nested-array<String>([[""] [""]])
+  #ASSERT(equal-contents?(result, expected))
+
+deftest global-pcre-index-1 :
+  val result = global-regex-match("()", "abc", 1)
+  val expected = to-nested-array<String>([["", ""] ["", ""] ["", ""]])
+  #ASSERT(equal-contents?(result, expected))
+
+deftest global-pcre-index-2 :
+  val result = global-regex-match("abc", "", 0)
+  val expected = to-nested-array<String>([])
+  #ASSERT(equal-contents?(result, expected))
+
+deftest global-pcre-index-3 :
+  val result = global-regex-match("", "", 0)
+  val expected = to-nested-array<String>([[""]])
+  #ASSERT(equal-contents?(result, expected))
+
+deftest global-pcre-index-4 :
+  val result = global-regex-match("a", "aaa", 1)
+  val expected = to-nested-array<String>([["a"] ["a"]])
+  #ASSERT(equal-contents?(result, expected))
+
+deftest global-pcre-index-5 :
+  val result = global-regex-match("a", "aaa", 3)
+  val expected = to-nested-array<String>([])
+  #ASSERT(equal-contents?(result, expected))
+
+deftest global-pcre-index-6 :
+  val result = global-regex-match("ba", "ababa", 1)
+  val expected = to-nested-array<String>([["ba"] ["ba"]])
+  #ASSERT(equal-contents?(result, expected))
+
+deftest global-pcre-index-7 :
+  val result = global-regex-match("\\w\\w", "abcdef", 3)
+  val expected = to-nested-array<String>([["de"]])
+  #ASSERT(equal-contents?(result, expected))
+
+deftest global-pcre-index-8 :
+  val result = global-regex-match("\\w+", "abcdef", 3)
+  val expected = to-nested-array<String>([["def"]])
+  #ASSERT(equal-contents?(result, expected))
+
+deftest global-pcre-index-9 :
+  val result = global-regex-match("^\\w+?", "abc", 1)
+  val expected = to-nested-array<String>([["b"]])
+  #ASSERT(equal-contents?(result, expected))
+
+;===== alternate regex-match with index =====
+deftest alternate-pcre-call-index-0 :
+  val result = regex-match("a", "aAa", 1, false) as Array<String>
+  val expected = to-array<String>(["a"])
+  #ASSERT(equal-contents?(result, expected))
+
+deftest alternate-pcre-call-index-1 :
+  val result = regex-match("a", "aAa", true) as Array<Array<String>>
+  val expected = to-nested-array<String>([["a"] ["a"]])
+  #ASSERT(equal-contents?(result, expected))

@@ -1,0 +1,3 @@
+
+package pcre requires :
+  ccflags: "-lpcre"

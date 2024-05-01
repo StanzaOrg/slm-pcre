@@ -1,0 +1,20 @@
+
+name = "slm-pcre"
+version = "0.0.0"
+
+[dependencies]
+
+[dependencies.pcre]
+pkg="pcre"
+version="8.45"
+type="conan"
+options.build_pcre_16="False"
+options.build_pcre_32="False"
+options.build_pcre_8="True"
+options.build_pcrecpp="False"
+options.build_pcregrep="False"
+options.shared="True"
+options.with_jit="False"
+options.with_stack_for_recursion="True"
+options.with_unicode_properties="True"
+options.with_utf="True"

@@ -1,0 +1,18 @@
+include? ".slm/stanza.proj"
+pkg-cache: ".slm/pkg-cache"
+
+package pcre defined-in "src/pcre.stanza"
+packages pcre/* defined-in "src/pcre"
+
+include "stanza-pcre.proj"
+
+build main :
+  inputs:
+    pcre
+  pkg: ".slm/pkgs"
+
+build-test test :
+  inputs:
+    pcre/tests
+  pkg: ".slm/test-pkgs"
+  o: "pcre-tests"

@@ -10,6 +10,7 @@ from conans.model.build_info import _Component
 from io import TextIOWrapper
 from pathlib import Path
 import jsons
+import platform
 
 # LBStanza Generator class
 class LBStanzaGenerator:
@@ -148,6 +149,10 @@ class LBStanzaGenerator:
         self._conanfile.output.trace(f"  > write_cpp_info_to_fragment({is_shared_lib}, \"{libs}\"")
         outerlibname = self._conanfile.name.removeprefix("slm-")
         relative_path = Path(f"{{.}}/../{outerlibname}/lib")
+
+        ### HACK: 20240501 the pcre/8.45 conan package puts the dlls in the bin directory
+        if platform.system() == "Windows":
+          relative_path = Path(f"{{.}}/../{outerlibname}/bin")
 
         # lfn["relative"]["linux"] = ["a", "b"]
         libfilenames: dict[str, dict[str, list[str]]] = {}

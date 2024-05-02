@@ -164,8 +164,8 @@ class LBStanzaGenerator:
         for l, p in libs.items():
             ### HACK: 20240501 the pcre/8.45 conan package puts the dlls in the bin directory
             if platform.system() == "Windows":
-                if p.endswith("/lib"):
-                    p = p.removesuffix("/lib") + "/bin"
+                if p.name == "lib":
+                    p = p.parents[0] / "bin"
 
             # calculate filenames
             if is_shared_lib:

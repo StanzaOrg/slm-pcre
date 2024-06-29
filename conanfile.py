@@ -19,15 +19,15 @@ from shutil import copy2, copytree
 required_conan_version = ">=2.0"
 
 class ConanSlmPackage(ConanFile):
-  package_type = "header-library"
+  package_type = "library"
   python_requires = "lbstanzagenerator_pyreq/[>=0.1]"
 
   # Binary configuration
   #settings = "os", "arch", "compiler", "build_type"
   settings = "os", "arch"
 
-  options = {}
-  default_options = {}
+  options = {"shared": [True, False], "fPIC": [True, False]}
+  default_options = {"shared": False, "fPIC": True}
   implements = ["auto_shared_fpic"]
 
 
